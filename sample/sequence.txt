@@ -1,0 +1,5 @@
+
+json: https://www.ncbi.nlm.nih.gov/Structure/cdd/wrpsb.cgi?callback=jsonp1498031145218&_=1498031145803&dhandle=QM3-data_cache-9D71FD251E0EAC2-594A24288A2C&mode=rep&gwidth=900&output=gmap
+png: https://www.ncbi.nlm.nih.gov/Structure/cdd/wrpsb.cgi?dhandle=QM3-data_cache-9D71FD251E0EAC2-594A24288A2C&show_feat=true&mode=rep&gwidth=900&output=graph
+json: Request URL:https://www.ncbi.nlm.nih.gov/Structure/cdd/wrpsb.cgi?callback=jsonp1498031145219&_=1498031888018&dhandle=QM3-data_cache-9D71FD251E0EAC2-594A24288A2C&mode=full&gwidth=900&usermode&output=gmap
+png: Request URL:https://www.ncbi.nlm.nih.gov/Structure/cdd/wrpsb.cgi?dhandle=QM3-data_cache-9D71FD251E0EAC2-594A24288A2C&show_feat=true&mode=full&gwidth=900&output=graph
