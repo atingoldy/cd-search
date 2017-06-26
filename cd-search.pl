@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# $Id: web_blast.pl,v 1.10 2016/07/13 14:32:50 merezhuk Exp $
+# $Id: cd-search.pl,v 0.01 2017/06/25 11:20:00 ajain Exp $
 # ===========================================================================
 #
 # return codes:
@@ -14,7 +14,7 @@
 # ===========================================================================
 
 use strict;
-#use warnings;
+use warnings;
 use URI::Escape;
 use LWP::Simple;
 use LWP::UserAgent;
@@ -28,11 +28,8 @@ my $argc = $#ARGV + 1;
 
 if ($argc < 3)
     {
-    print "usage: web_blast.pl program database query [query]...\n";
-    print "where program = megablast, blastn, blastp, rpsblast, blastx, tblastn, tblastx\n\n";
-    print "example: web_blast.pl blastp nr protein.fasta\n";
-    print "example: web_blast.pl rpsblast cdd protein.fasta\n";
-    print "example: web_blast.pl megablast nt dna1.fasta dna2.fasta\n";
+    print "usage: cd-search.pl program database query [query]...\n";
+    print "example: cd-search.pl xxx xx protein.fasta\n";
 
     exit 1;
 }
