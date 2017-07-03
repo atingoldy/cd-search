@@ -21,8 +21,7 @@ use LWP::UserAgent;
 use HTTP::Request::Common qw(POST);
 use HTML::TreeBuilder;
 use HTML::Form;
-
-my $ua = LWP::UserAgent->new;
+use File::Path qw(make_path);
 
 my $argc = $#ARGV + 1;
 
@@ -35,27 +34,30 @@ if ( $argc < 2 ) {
 my $inputFolder  = shift;
 my $outputFolder = shift;
 my $indexFile = "C:\\Users\\Atin\\Documents\\contigs\\F_atropurpurea_533_whole\\contig_atropurpurea.txt";
-open( DAT, $indexFile ) || die "Could not open the file $indexFile";
 my $fileCount = 0;
+my $maxFileCount=100;
 
 # build the request
 my $args = "db=cdd&evalue=0.010000&compbasedadj=T&maxhits=500&mode=rep&filter=false";
 print STDERR "Query options: ", $args, "\n";
-
+$outputFolder = "D:\\Users\\Atin\\output\\F_atropurpurea_533_whole";
+make_path($outputFolder);
+open(DAT, $indexFile ) || die "Could not open the file $indexFile";
 while (<DAT>) {
+    my $ua = LWP::UserAgent->new;
     $fileCount++;
-    if ( $fileCount > 100 ) {
+    if ( $fileCount > $maxFileCount ) {
         print STDERR "Process completed successfully\n";
         exit 0;
     }
     my @line = split( /\t/, $_ );
     my $query = "C:\\Users\\Atin\\Documents\\contigs\\F_atropurpurea_533_whole\\contig_atropurpurea_whole\\@line[0].fas";
-    my $outputPath = "D:\\Users\\Atin\\output\\F_atropurpurea_533_whole\\@line[0]";
+    my $outputPath = "$outputFolder\\@line[0]";
 
     # read and encode the queries
-    my $encoded_query;
+    my $encoded_query = undef;
     print STDERR "Processing: ", $query, "\n";
-    open( QUERY, $query );
+    open(QUERY, $query );
     while (<QUERY>) {
         $encoded_query = $encoded_query . uri_escape($_);
     }
@@ -71,7 +73,7 @@ while (<DAT>) {
     my $response = $ua->request($req);
 
     # parse out the request id
-    #print STDERR "Response content: ", $response->content, "\n";
+    print STDERR "Response content: ", $response->content, "\n";
     my @forms   = HTML::Form->parse($response);
     my $dhandle = $forms[0]->find_input('dhandle')->value;
     print STDERR "Found dhandle: ", $dhandle, "\n";
@@ -101,10 +103,8 @@ while (<DAT>) {
         }
         my $request = @forms[0]->make_request;
         my $resp    = $ua->request($request);
-        if ( $resp->is_success() ) {
+        if ($resp->is_success()) {
             print STDERR "Request #$trial success .. parsing content\n";
-
-            #do something with content
             my $tree = HTML::TreeBuilder->new_from_content( $resp->content );
             my $div_sumtables =
               $tree->look_down( _tag => 'div', id => qr/div_sumtables/ );
@@ -135,9 +135,11 @@ while (<DAT>) {
 "https://www.ncbi.nlm.nih.gov/Structure/cdd/wrpsb.cgi?dhandle=$dhandle&show_feat=true&mode=full&gwidth=900&output=graph";
     my $fileIWantToSaveAs = "$outputPath.png";
 
-    getstore( $fileIWantToDownload, $fileIWantToSaveAs );
+    getstore($fileIWantToDownload, $fileIWantToSaveAs );
 
     print STDERR "Image $outputPath.png saved successfully\n";
+    sleep 3;
+
 }
 
 exit 0;
