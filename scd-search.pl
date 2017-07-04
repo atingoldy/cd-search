@@ -15,29 +15,43 @@
 
 #use strict;
 #use warnings;
-use URI::Escape;
-use LWP::Simple;
-use LWP::UserAgent;
+use File::Path qw(make_path);
+use Getopt::Mixed;
+use HTML::Form;
 use HTTP::Request::Common qw(POST);
 use HTML::TreeBuilder;
-use HTML::Form;
-use File::Path qw(make_path);
+use LWP::Simple;
+use LWP::UserAgent;
+use URI::Escape;
 
-my $argc = $#ARGV + 1;
+use constant WRPSB => "https://www.ncbi.nlm.nih.gov/Structure/cdd/wrpsb.cgi";
 
-if ( $argc < 2 ) {
-    print "usage: scd-search.pl <output path> <file prefix>\n";
-    print "example: scd-search.pl C:\abcd D:\abcd \n";
-    exit 1;
+my($readDir, $outDir, $filePrefix,  $mode, $verbose) =
+  ( undef,     undef,     undef, "full",    undef);
+
+Getopt::Mixed::init('r=s o=s f=s m:s readDirectory>r outputDirectory>o mode>m');
+
+while(my( $option, $value, $pretty) = Getopt::Mixed::nextOption()) {
+    $readDir = $value if $option eq 'r';
+    $outDir = $value if $option eq 'o';
+    $filePrefix = $value if $option eq 'f';
+    $mode = $value if $option eq 'm';
+    #    $verbose = $value if $option eq 'v';
 }
+
+print STDERR "Read directory=$readDir\n";
+print STDERR "Output directory=$outDir\n";
+print STDERR "Contig file name=$filePrefix\n";
+print STDERR "Output mode=$mode\n";
+#print STDERR "verbose=$verbose\n";
+
+Getopt::Mixed::cleanup();
 
 # build the request
 my $args = "db=cdd&evalue=0.010000&compbasedadj=T&maxhits=500&mode=rep&filter=false";
 print STDERR "Query options: ", $args, "\n";
-my $outputFolder = shift;
-my $filePrefix = shift;
-my $query = "C:\\Users\\Atin\\Documents\\contigs\\F_atropurpurea_533_whole\\contig_atropurpurea_whole\\$filePrefix.fas";
-my $outputPath = "$outputFolder\\$filePrefix";
+my $query = "$readDir\\$filePrefix.fas";
+my $outputPath = "$outDir\\$filePrefix";
 
 # read and encode the queries
 my $encoded_query = undef;
@@ -50,7 +64,7 @@ close QUERY;
 
 $args = $args . "&seqinput=" . $encoded_query;
 
-my $req = new HTTP::Request POST => 'https://www.ncbi.nlm.nih.gov/Structure/cdd/wrpsb.cgi';
+my $req = new HTTP::Request POST => WRPSB;
 $req->content_type('application/x-www-form-urlencoded');
 $req->content($args);
 
@@ -60,11 +74,18 @@ my $response = $ua->request($req);
 
 # parse out the request id
 #print STDERR "Response content: ", $response->content, "\n";
-my @forms   = HTML::Form->parse($response);
-my $dhandle = $forms[0]->find_input('dhandle')->value;
+my @forms = HTML::Form->parse($response);
+my $inpDhandle = $forms[0]->find_input('dhandle');
+if(!$inpDhandle){
+    print STDERR "Something unexpected happened\n";
+    print STDERR "Response content: ", $response->content, "\n";
+#    print "$_\n" for @forms[0]->value;
+    exit 7;
+}
+my $dhandle = $inpDhandle->value;
 print STDERR "Found dhandle: ", $dhandle, "\n";
 
-if ( $dhandle eq "" ) {
+if ($dhandle eq "") {
     print STDERR "Cannot find dhandle .. exiting\n";
     my $tr = HTML::TreeBuilder->new_from_content( $response->content );
     foreach my $atag ( $tr->look_down( _tag => q{p}, 'class' => 'error' ) )
@@ -117,8 +138,7 @@ while (true) {
 
 # retrieve and display results
 print STDERR "Table $outputPath.html saved now downloading image\n";
-my $fileIWantToDownload =
-    "https://www.ncbi.nlm.nih.gov/Structure/cdd/wrpsb.cgi?dhandle=$dhandle&show_feat=true&mode=full&gwidth=900&output=graph";
+my $fileIWantToDownload = WRPSB."?dhandle=$dhandle&show_feat=true&mode=full&gwidth=900&output=graph";
 my $fileIWantToSaveAs = "$outputPath.png";
 
 getstore($fileIWantToDownload, $fileIWantToSaveAs );
