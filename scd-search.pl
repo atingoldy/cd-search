@@ -39,23 +39,24 @@ while(my( $option, $value, $pretty) = Getopt::Mixed::nextOption()) {
     #    $verbose = $value if $option eq 'v';
 }
 
-print STDERR "Read directory=$readDir\n";
-print STDERR "Output directory=$outDir\n";
-print STDERR "Contig file name=$filePrefix\n";
-print STDERR "Output mode=$mode\n";
-#print STDERR "verbose=$verbose\n";
+#print STDERR "Read directory=$readDir\n";
+#print STDERR "Output directory=$outDir\n";
+#print STDERR "Contig file name=$filePrefix\n";
+#print STDERR "Output mode=$mode\n";
+##print STDERR "verbose=$verbose\n";
 
 Getopt::Mixed::cleanup();
 
 # build the request
 my $args = "db=cdd&evalue=0.010000&compbasedadj=T&maxhits=500&mode=rep&filter=false";
-print STDERR "Query options: ", $args, "\n";
+#print STDERR "Query options: ", $args, "\n";
 my $query = "$readDir\\$filePrefix.fas";
 my $outputPath = "$outDir\\$filePrefix";
 
 # read and encode the queries
 my $encoded_query = undef;
-print STDERR "Processing: ", $query, "\n";
+#print STDERR "Processing: ", $query, "\n";
+print STDERR "Processing: ", $filePrefix, ".fas ";
 open(QUERY, $query );
 while (<QUERY>) {
     $encoded_query = $encoded_query . uri_escape($_);
@@ -83,7 +84,7 @@ if(!$inpDhandle){
     exit 7;
 }
 my $dhandle = $inpDhandle->value;
-print STDERR "Found dhandle: ", $dhandle, "\n";
+#print STDERR "Found dhandle: ", $dhandle, "\n";
 
 if ($dhandle eq "") {
     print STDERR "Cannot find dhandle .. exiting\n";
@@ -96,9 +97,9 @@ if ($dhandle eq "") {
 }
 
 # wait for search to complete
-print STDERR "Waiting for 3 seconds\n";
+#print STDERR "Waiting for 3 seconds\n";
 sleep 3;
-print STDERR "Starting poll every 5 seconds\n";
+#print STDERR "Starting poll every 5 seconds\n";
 my $trial = 0;
 
 # poll for results
@@ -111,10 +112,10 @@ while (true) {
     my $request = @forms[0]->make_request;
     my $resp    = $ua->request($request);
     if ($resp->is_success()) {
-        print STDERR "Request #$trial success .. parsing content\n";
+#        print STDERR "Request #$trial success .. parsing content\n";
+        print STDERR ".";
         my $tree = HTML::TreeBuilder->new_from_content( $resp->content );
-        my $div_sumtables =
-            $tree->look_down( _tag => 'div', id => qr/div_sumtables/ );
+        my $div_sumtables = $tree->look_down( _tag => 'div', id => qr/div_sumtables/ );
         sleep 5;
         next unless defined($div_sumtables);
         my @full_table = $div_sumtables->look_down( _tag => 'table' );
@@ -137,12 +138,12 @@ while (true) {
 }    # end poll loop
 
 # retrieve and display results
-print STDERR "Table $outputPath.html saved now downloading image\n";
-my $fileIWantToDownload = WRPSB."?dhandle=$dhandle&show_feat=true&mode=full&gwidth=900&output=graph";
+#print STDERR "Table $outputPath.html saved now downloading image\n";
+my $fileIWantToDownload = WRPSB."?dhandle=$dhandle&show_feat=true&mode=$mode&gwidth=900&output=graph";
 my $fileIWantToSaveAs = "$outputPath.png";
 
 getstore($fileIWantToDownload, $fileIWantToSaveAs );
 
-print STDERR "Image $outputPath.png saved successfully\n";
-
+#print STDERR "Image $outputPath.png saved successfully\n";
+print STDERR " done\n";
 exit 0;
