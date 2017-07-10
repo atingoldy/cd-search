@@ -56,7 +56,7 @@ my $outputPath = "$outDir\\$filePrefix";
 # read and encode the queries
 my $encoded_query = undef;
 #print STDERR "Processing: ", $query, "\n";
-print STDERR "Processing: ", $filePrefix, ".fas ";
+print STDERR "Processing: \"$filePrefix.fas\" ";
 open(QUERY, $query );
 while (<QUERY>) {
     $encoded_query = $encoded_query . uri_escape($_);
@@ -105,7 +105,7 @@ my $trial = 0;
 # poll for results
 while (true) {
     $trial++;
-    if ( $trial eq 7 ) {
+    if ($trial eq 20) {
         print STDERR "Trial exhausted .. exiting\n";
         exit 7;
     }

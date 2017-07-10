@@ -20,16 +20,17 @@ use File::Basename;
 use File::Path qw(make_path);
 use IPC::System::Simple qw(system capture);
 
-my($inDir, $outDir, $count, $mode, $verbose) =
-  ( undef,   undef,    200, "full",   undef);
+my($inDir, $outDir, $count, $mode, $skipDone, $verbose) =
+  ( undef,   undef,    200, "full", "false",  undef);
 
-Getopt::Mixed::init('i=s o=s c:i m:s inputDirectory>i outputDirectory>o count>c mode>m');
+Getopt::Mixed::init('i=s o=s c:i m:s s:s inputDirectory>i outputDirectory>o count>c mode>m skipDone>s');
 
 while(my( $option, $value, $pretty) = Getopt::Mixed::nextOption()) {
     $inDir = $value if $option eq 'i';
     $outDir = $value if $option eq 'o';
     $count = $value if $option eq 'c';
     $mode = $value if $option eq 'm';
+    $skipDone = $value if $option eq 's';
 #    $verbose = $value if $option eq 'v';
 }
 
@@ -68,7 +69,7 @@ my $outputDirectory="$outDir/$bDir";
 my $fileCount = 0;
 make_path($outputDirectory);
 open(DAT, $indexFile ) || die "Could not open the file $indexFile\n";
-while (<DAT>) {
+LINE: while (<DAT>) {
     $fileCount++;
     if ( $fileCount > $count ) {
         print STDERR "Process completed successfully\n";
@@ -77,6 +78,15 @@ while (<DAT>) {
 
     my @line = split( /\t/, $_ );
 #    print STDERR "scd-search.pl ", "$readDir ", "$outputDirectory ", "\"@line[0]\" ", "$mode", "\n";
+    print STDERR $fileCount, ". ";
+    my $thisFile = "$readDir\\@line[0].fas";
+    die "The file \"@line[0].fas\" does not exist, and I can't go on without it." unless -e $thisFile;
+    if($skipDone eq "true") {
+        if(-e "$outputDirectory\\@line[0].png" && -e "$outputDirectory\\@line[0].html"){
+            print STDERR "\"@line[0].fas\" already done .. skipped\n";
+            next LINE;
+        }
+    }
     system($^X, "scd-search.pl", "-r=\"$readDir\"", "-o=\"$outputDirectory\"", "-f=\"@line[0]\"", "-m=$mode");
 }
 
