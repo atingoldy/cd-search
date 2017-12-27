@@ -58,8 +58,7 @@ my $ua = LWP::UserAgent->new;
 
 my $argc = $#ARGV + 1;
 
-if ($argc < 3)
-    {
+if ($argc < 3) {
     print "usage: web_blast.pl program database query [query]...\n";
     print "where program = megablast, blastn, blastp, rpsblast, blastx, tblastn, tblastx\n\n";
     print "example: web_blast.pl blastp nr protein.fasta\n";
@@ -72,26 +71,22 @@ if ($argc < 3)
 my $program = shift;
 my $database = shift;
 
-if ($program eq "megablast")
-    {
+if ($program eq "megablast") {
     $program = "blastn&MEGABLAST=on";
-    }
+}
 
-if ($program eq "rpsblast")
-    {
+if ($program eq "rpsblast") {
     $program = "blastp&SERVICE=rpsblast";
-    }
+}
 
 # read and encode the queries
 my $encoded_query = "";
-foreach my $query (@ARGV)
-    {
-    open(QUERY,$query);
-    while(<QUERY>)
-        {
+foreach my $query (@ARGV) {
+    open(QUERY, $query);
+    while (<QUERY>) {
         $encoded_query = $encoded_query . uri_escape($_);
-        }
     }
+}
 
 # build the request
 my $args = "CMD=Put&PROGRAM=$program&DATABASE=$database&HITLIST_SIZE=500&EXPECT=0.010000&COMPOSITION_BASED_STATISTICS=2&FILTER=F";
@@ -99,7 +94,6 @@ print STDERR "Query content: ", $args, "\n";
 $args = $args . "&QUERY=" . $encoded_query;
 
 my $req = new HTTP::Request POST => 'https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi';
-#$req = new HTTP::Request POST => 'https://www.ncbi.nlm.nih.gov/Structure/cdd/wrpsb.cgi';
 $req->content_type('application/x-www-form-urlencoded');
 $req->content($args);
 
@@ -109,76 +103,70 @@ my $response = $ua->request($req);
 # parse out the request id
 #print STDERR "Response content: ", $response->content, "\n";
 $response->content =~ /^    RID = (.*$)/m;
-my $rid=$1;
+my $rid = $1;
 
-if($rid eq ""){
-	print STDERR "Cannot find RID .. exiting\n";
-	my $tr = HTML::TreeBuilder->new_from_content($response->content);
-    foreach my $atag ( $tr->look_down( _tag => q{p}, 'class' => 'error' ) ) {
-		print STDERR $atag->content_list;
-	}
-	exit 6;
+if ($rid eq "") {
+    print STDERR "Cannot find RID .. exiting\n";
+    my $tr = HTML::TreeBuilder->new_from_content($response->content);
+    foreach my $atag ($tr->look_down(_tag => q{p}, 'class' => 'error')) {
+        print STDERR $atag->content_list;
+    }
+    exit 6;
 }
 
 print STDERR "Found RID: ", $rid, "\n";
 # parse out the estimated time to completion
 $response->content =~ /^    RTOE = (.*$)/m;
-my $rtoe=$1;
+my $rtoe = $1;
 
 # wait for search to complete
 sleep $rtoe;
 
 # poll for results
-while (true)
-    {
+while (true) {
     sleep 5;
 
-    $req = new HTTP::Request GET => "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi?CMD=Get&FORMAT_OBJECT=SearchInfo&RID=$rid";
+    $req = new HTTP::Request GET =>
+            "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi?CMD=Get&FORMAT_OBJECT=SearchInfo&RID=$rid";
     $response = $ua->request($req);
 
-    if ($response->content =~ /\s+Status=WAITING/m)
-        {
+    if ($response->content =~ /\s+Status=WAITING/m) {
         print STDERR "Searching...\n";
         next;
-        }
+    }
 
-    if ($response->content =~ /\s+Status=FAILED/m)
-        {
+    if ($response->content =~ /\s+Status=FAILED/m) {
         print STDERR "Search $rid failed; please report to blast-help\@ncbi.nlm.nih.gov.\n";
         exit 4;
-        }
+    }
 
-    if ($response->content =~ /\s+Status=UNKNOWN/m)
-        {
+    if ($response->content =~ /\s+Status=UNKNOWN/m) {
         print STDERR "Search $rid expired.\n";
-        print STDERR "HTTP status: ", $response->code( ), "\n";
-		print STDERR "Status Line: ", $response->status_line, "\n";
-		print STDERR "HTTP Message: ",$response->message( ), "\n";
-		print STDERR "HTTP Response as string: ", $response->as_string( );
-		exit 3;
-        }
+        print STDERR "HTTP status: ", $response->code(), "\n";
+        print STDERR "Status Line: ", $response->status_line, "\n";
+        print STDERR "HTTP Message: ", $response->message(), "\n";
+        print STDERR "HTTP Response as string: ", $response->as_string();
+        exit 3;
+    }
 
-    if ($response->content =~ /\s+Status=READY/m) 
-        {
-        if ($response->content =~ /\s+ThereAreHits=yes/m)
-            {
-            #  print STDERR "Search complete, retrieving results...\n";
+    if ($response->content =~ /\s+Status=READY/m) {
+        if ($response->content =~ /\s+ThereAreHits=yes/m) {
+            print STDERR "Search complete, retrieving results...\n";
             last;
-            }
-        else
-            {
-            print STDERR "No hits found.\n";
-            print STDERR "HTTP status: ", $response->code( ), "\n";
-			print STDERR "Status Line: ", $response->status_line, "\n";
-			print STDERR "HTTP Message: ",$response->message( ), "\n";
-			print STDERR "HTTP Response as string: ", $response->as_string( );
-			exit 2;
-            }
         }
+        else {
+            print STDERR "No hits found.\n";
+            print STDERR "HTTP status: ", $response->code(), "\n";
+            print STDERR "Status Line: ", $response->status_line, "\n";
+            print STDERR "HTTP Message: ", $response->message(), "\n";
+            print STDERR "HTTP Response as string: ", $response->as_string();
+            exit 2;
+        }
+    }
 
     # if we get here, something unexpected happened.
     exit 5;
-    } # end poll loop
+} # end poll loop
 
 # retrieve and display results
 $req = new HTTP::Request GET => "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi?CMD=Get&FORMAT_TYPE=Text&RID=$rid";
