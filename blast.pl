@@ -12,52 +12,59 @@ use File::Basename;
 
 use constant BLAST_URL => "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi";
 
-my($inFile, $outDir) =
+my($inDir, $outDir) =
     (undef,  undef);
 
-Getopt::Mixed::init('o=s f=s inputFile>f outputDirectory>o');
+Getopt::Mixed::init('o=s i=s inputDirectory>i outputDirectory>o');
 
 while(my( $option, $value, $pretty) = Getopt::Mixed::nextOption()) {
+    $inDir = $value if $option eq 'i';
     $outDir = $value if $option eq 'o';
-    $inFile = $value if $option eq 'f';
 }
 
+#print STDERR "Input Directory=$inDir\n";
 #print STDERR "Output directory=$outDir\n";
-#print STDERR "Contig file name=$inFile\n";
 
 Getopt::Mixed::cleanup();
 
 # build the request (this one as per 'Somewhat similar sequences (blastn)')
 my $args = "CMD=Put&PROGRAM=blastn&DATABASE=nt&WORD_SIZE=11&NUCL_REWARD=2&NUCL_PENALTY=-3&GAPCOSTS=5 2";
 #print STDERR "Query options: ", $args, "\n";
-$inFile =~ s/^"(.*)"$/$1/;
+$inDir =~ s/^"(.*)"$/$1/;
 $outDir =~ s/^"(.*)"$/$1/;
-my ($filePrefix, $dir, $ext) = fileparse($inFile, qr/\.[^.]*/);
-print STDERR "\"$filePrefix\" ";
-my $outputPath = "$outDir/$filePrefix";
+
+#my ($filePrefix, $dir, $ext) = fileparse($inFile, qr/\.[^.]*/);
+#print STDERR "\"$filePrefix\" ";
+#my $outputPath = "$outDir/$filePrefix";
+
 #print STDERR "outputPath=$outputPath\n";
 # read and encode the queries
 my $encoded_query = undef;
 #print STDERR "Processing: $inFile \n";
-open(QUERY, $inFile) or die "Failed to open $inFile: $!\n";
-while (<QUERY>) {
-    $encoded_query = $encoded_query . uri_escape($_);
+my @files = <$inDir/*.fas>;
+foreach my $file (@files) {
+    open(QUERY, $file) or die "Failed to open $file: $!\n";
+    while (<QUERY>) {
+        $encoded_query = $encoded_query . uri_escape($_);
+    }
+    close QUERY;
 }
-close QUERY;
 
 $args = $args . "&QUERY=" . $encoded_query;
 
 #print STDERR $args, "\n";
-
-my $request = new HTTP::Request POST => BLAST_URL;
+my $request = HTTP::Request->new(POST => BLAST_URL);
 $request->content_type('application/x-www-form-urlencoded');
 $request->content($args);
-
-# get the response
 my $ua = LWP::UserAgent->new;
 my $response = $ua->request($request);
 
 # parse out the request id
+#print STDERR "HTTP status: ", $response->code(), "\n";
+#print STDERR "Status Line: ", $response->status_line, "\n";
+#print STDERR "HTTP Message: ", $response->message(), "\n";
+#print STDERR "HTTP Response as string: ", $response->as_string();
+
 #print STDERR "Response content: ", $response->content, "\n";
 $response->content =~ /^    RID = (.*$)/m;
 my $rid = $1;
@@ -65,17 +72,17 @@ my $rid = $1;
 if ($rid eq "") {
     print STDERR "Cannot find RID .. exiting\n";
     my $tr = HTML::TreeBuilder->new_from_content($response->content);
-    foreach my $atag ($tr->look_down(_tag => q{p}, 'class' => 'error')) {
-        print STDERR $atag->content_list;
+    foreach my $error_tag ($tr->look_down(_tag => q{p}, 'class' => 'error')) {
+        print STDERR $error_tag->content_list;
     }
     exit 6;
 }
 
-#print STDERR "Found RID: ", $rid, "\n";
+print STDERR "Found RID: ", $rid, "\n";
 # parse out the estimated time to completion
 $response->content =~ /^    RTOE = (.*$)/m;
 my $rtoe = $1;
-#print STDERR "Estimated time to complete: ", $rtoe, "\n";
+print STDERR "Estimated time to complete: ", $rtoe, "\nSearching ";
 sleep $rtoe;
 
 #print STDERR "Starting poll every 5 seconds\n";
@@ -89,7 +96,7 @@ while (true) {
         exit 0;
     }
 #    print STDERR "Creating SearchInfo request\n";
-    my $req = new HTTP::Request GET => BLAST_URL . "?CMD=Get&FORMAT_OBJECT=SearchInfo&RID=$rid";
+    my $req = HTTP::Request->new(GET, BLAST_URL . "?CMD=Get&FORMAT_OBJECT=SearchInfo&RID=$rid");
     my $resp = $ua->request($req);
 #    print STDERR "Checking if success\n";
     if ($resp->is_success()) {
@@ -102,7 +109,7 @@ while (true) {
         }
 
         if ($resp->content =~ /\s+Status=FAILED/m) {
-            print STDERR "Search $rid failed; please report to blast-help\@ncbi.nlm.nih.gov.\n";
+            print STDERR "Search $rid failed.\n";
             exit 4;
         }
 
@@ -117,24 +124,59 @@ while (true) {
 
         if ($resp->content =~ /\s+Status=READY/m) {
             if ($resp->content =~ /\s+ThereAreHits=yes/m) {
-                #print STDERR "Search complete, retrieving results...\n";
+                print STDERR " done\n";
                 # retrieve and display results
-                $req = new HTTP::Request GET => BLAST_URL . "?CMD=Get&FORMAT_TYPE=HTML&RID=$rid";
-                $resp = $ua->request($req);
-                if ($resp->is_success()) {
+                my $content_req = HTTP::Request->new(GET, BLAST_URL . "?CMD=Get&FORMAT_TYPE=HTML&RID=$rid");
+                my $content_resp = $ua->request($content_req);
+                if ($content_resp->is_success) {
                     #print STDERR "Content query success\n";
-                    #print STDERR $resp->content, "\n";
-                    my $tree = HTML::TreeBuilder->new_from_content($resp->content);
-                    my $dscTable = $tree->look_down(_tag => 'table', id => qr/dscTable/);
-                    #print STDERR $dscTable->as_HTML, "\n";
-                    my $reportFile = "$outputPath.html";
-                    open(my $fh, '>', $reportFile);
-                    print $fh $dscTable->as_HTML;
-                    close $fh;
+                    #print STDERR $content_resp->content, "\n";
+                    my @failed_files = undef;
+                    my $resp_tree = HTML::TreeBuilder->new_from_content($content_resp->content);
+                    my $queryList = $resp_tree->look_down(_tag => 'select', id => qr/queryList/);
+                    for my $i (0 .. @files - 1) {
+                        my $statusFor1 = $queryList->look_down(_tag => 'option', value => qr/$i/)->attr('class');
+                        if ($statusFor1 eq "nohits") {
+                            push @failed_files, @files[$i];
+                        }
+                    }
+
+                    my %failed_files_table = map {$_ => 1} @failed_files;
+                    make_path($outDir);
+                    # lets send content request skipping failed files
+                    for my $i (0 .. @files - 1) {
+                        my ($filePrefix, $dir, $ext) = fileparse(@files[$i], qr/\.[^.]*/);
+                        print STDERR $i+1, ". \"$filePrefix.fas\" ";
+                        if (exists($failed_files_table{@files[$i]})) {
+                            print STDERR "No hits found.\n";
+                            next;
+                        }
+                        else {
+                            my $reportFile = "$outDir/$filePrefix.html";
+                            if (-e $reportFile) {
+                                print STDERR "already done .. skipped\n";
+                                next;
+                            }
+                            my $result_req = HTTP::Request->new(GET, BLAST_URL . "?CMD=Get&FORMAT_TYPE=HTML&RID=$rid&QUERY_INDEX=$i");
+                            my $result_resp = $ua->request($result_req);
+                            if ($result_resp->is_success) {
+                                my $result_tree = HTML::TreeBuilder->new_from_content($result_resp->content);
+                                my $dscTable = $result_tree->look_down(_tag => 'table', id => qr/dscTable/);
+                                #print STDERR $dscTable->as_HTML, "\n";
+                                open(my $fh, '>', $reportFile);
+                                print $fh $dscTable->as_HTML;
+                                close $fh;
+                                print STDERR ".. done\n";
+                            }
+                            else {
+                                print STDERR "Failed to get response for file @files[$i]: ", $result_resp->content, "\n";
+                            }
+                        }
+                    }
                 }
                 else {
                     # if we get here, something unexpected happened.
-                    print STDERR "Content query failed", $resp->status_line, "\n";
+                    print STDERR "Content query failed to check status", $content_resp->status_line, "\n";
                 }
                 last;
             }
@@ -160,7 +202,13 @@ while (true) {
     sleep 5;
 }    # end poll loop
 
-
-
-print STDERR " done\n";
+my $delete_req = HTTP::Request->new(GET, BLAST_URL . "?CMD=Delete&RID=$rid");
+my $delete_resp = $ua->request($delete_req);
+if ($delete_resp->is_success) {
+    print STDERR "Done\n";
+}
+else {
+    print STDERR "Failed to delete results $rid\n";
+    print STDERR "Status Line: ", $resp->status_line, "\n";
+}
 exit 0;
