@@ -8,43 +8,46 @@ use HTML::TreeBuilder;
 use LWP::Simple;
 use LWP::UserAgent;
 use URI::Escape;
+use File::Basename;
 
 use constant BLAST_URL => "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi";
 
-my($readDir, $outDir, $filePrefix) =
-    ( undef,     undef,     undef);
+my($inFile, $outDir) =
+    (undef,  undef);
 
-Getopt::Mixed::init('r=s o=s f=s readDirectory>r outputDirectory>o');
+Getopt::Mixed::init('o=s f=s inputFile>f outputDirectory>o');
 
 while(my( $option, $value, $pretty) = Getopt::Mixed::nextOption()) {
-    $readDir = $value if $option eq 'r';
     $outDir = $value if $option eq 'o';
-    $filePrefix = $value if $option eq 'f';
+    $inFile = $value if $option eq 'f';
 }
 
-print STDERR "Read directory=$readDir\n";
-print STDERR "Output directory=$outDir\n";
-print STDERR "Contig file name=$filePrefix\n";
+#print STDERR "Output directory=$outDir\n";
+#print STDERR "Contig file name=$inFile\n";
 
 Getopt::Mixed::cleanup();
 
 # build the request (this one as per 'Somewhat similar sequences (blastn)')
 my $args = "CMD=Put&PROGRAM=blastn&DATABASE=nt&WORD_SIZE=11&NUCL_REWARD=2&NUCL_PENALTY=-3&GAPCOSTS=5 2";
-print STDERR "Query options: ", $args, "\n";
-my $query = "$readDir/$filePrefix.fas";
+#print STDERR "Query options: ", $args, "\n";
+$inFile =~ s/^"(.*)"$/$1/;
+$outDir =~ s/^"(.*)"$/$1/;
+my ($filePrefix, $dir, $ext) = fileparse($inFile, qr/\.[^.]*/);
+print STDERR "\"$filePrefix\" ";
 my $outputPath = "$outDir/$filePrefix";
-
+#print STDERR "outputPath=$outputPath\n";
 # read and encode the queries
 my $encoded_query = undef;
-print STDERR "Processing: ", $query, "\n";
-print STDERR "Processing: \"$filePrefix.fas\" \n";
-open(QUERY, $query);
+#print STDERR "Processing: $inFile \n";
+open(QUERY, $inFile) or die "Failed to open $inFile: $!\n";
 while (<QUERY>) {
     $encoded_query = $encoded_query . uri_escape($_);
 }
 close QUERY;
 
 $args = $args . "&QUERY=" . $encoded_query;
+
+#print STDERR $args, "\n";
 
 my $request = new HTTP::Request POST => BLAST_URL;
 $request->content_type('application/x-www-form-urlencoded');
@@ -68,14 +71,14 @@ if ($rid eq "") {
     exit 6;
 }
 
-print STDERR "Found RID: ", $rid, "\n";
+#print STDERR "Found RID: ", $rid, "\n";
 # parse out the estimated time to completion
 $response->content =~ /^    RTOE = (.*$)/m;
 my $rtoe = $1;
-print STDERR "Estimated time to complete: ", $rtoe, "\n";
+#print STDERR "Estimated time to complete: ", $rtoe, "\n";
 sleep $rtoe;
 
-print STDERR "Starting poll every 5 seconds\n";
+#print STDERR "Starting poll every 5 seconds\n";
 my $trial = 0;
 
 # poll for results
@@ -83,16 +86,18 @@ while (true) {
     $trial++;
     if ($trial eq 20) {
         print STDERR "Trial exhausted .. exiting\n";
-        exit 7;
+        exit 0;
     }
+#    print STDERR "Creating SearchInfo request\n";
     my $req = new HTTP::Request GET => BLAST_URL . "?CMD=Get&FORMAT_OBJECT=SearchInfo&RID=$rid";
     my $resp = $ua->request($req);
-
+#    print STDERR "Checking if success\n";
     if ($resp->is_success()) {
-
+        #print STDERR "Request success checking status\n";
         if ($resp->content =~ /\s+Status=WAITING/m) {
             #print STDERR "Searching...\n";
             print STDERR ".";
+            sleep 10;
             next;
         }
 
@@ -112,11 +117,12 @@ while (true) {
 
         if ($resp->content =~ /\s+Status=READY/m) {
             if ($resp->content =~ /\s+ThereAreHits=yes/m) {
-                # print STDERR "Search complete, retrieving results...\n";
+                #print STDERR "Search complete, retrieving results...\n";
                 # retrieve and display results
                 $req = new HTTP::Request GET => BLAST_URL . "?CMD=Get&FORMAT_TYPE=HTML&RID=$rid";
                 $resp = $ua->request($req);
                 if ($resp->is_success()) {
+                    #print STDERR "Content query success\n";
                     #print STDERR $resp->content, "\n";
                     my $tree = HTML::TreeBuilder->new_from_content($resp->content);
                     my $dscTable = $tree->look_down(_tag => 'table', id => qr/dscTable/);
@@ -125,10 +131,15 @@ while (true) {
                     open(my $fh, '>', $reportFile);
                     print $fh $dscTable->as_HTML;
                     close $fh;
-                }else {
-                    # if we get here, something unexpected happened.
-                    print STDERR $resp->status_line, "\n";
                 }
+                else {
+                    # if we get here, something unexpected happened.
+                    print STDERR "Content query failed", $resp->status_line, "\n";
+                }
+                last;
+            }
+            elsif ($resp->content =~ /\s+ThereAreHits=no/m) {
+                print STDERR "No hits found. ";
                 last;
             }
             else {
@@ -145,9 +156,10 @@ while (true) {
         # if we get here, something unexpected happened.
         print STDERR $resp->status_line, "\n";
         # exit 5;
-        sleep 5;
     }
+    sleep 5;
 }    # end poll loop
+
 
 
 print STDERR " done\n";
