@@ -22,16 +22,16 @@ while(my( $option, $value, $pretty) = Getopt::Mixed::nextOption()) {
     $outDir = $value if $option eq 'o';
 }
 
-#print STDERR "Input Directory=$inDir\n";
-#print STDERR "Output directory=$outDir\n";
+print STDERR "Input Directory=$inDir\n";
+print STDERR "Output directory=$outDir\n";
 
 Getopt::Mixed::cleanup();
 
 # build the request (this one as per 'Somewhat similar sequences (blastn)')
 my $args = "CMD=Put&PROGRAM=blastn&DATABASE=nt&WORD_SIZE=11&NUCL_REWARD=2&NUCL_PENALTY=-3&GAPCOSTS=5 2";
 #print STDERR "Query options: ", $args, "\n";
-$inDir =~ s/^"(.*)"$/$1/;
-$outDir =~ s/^"(.*)"$/$1/;
+#$inDir =~ s/^"(.*)"$/$1/;
+#$outDir =~ s/^"(.*)"$/$1/;
 
 #my ($filePrefix, $dir, $ext) = fileparse($inFile, qr/\.[^.]*/);
 #print STDERR "\"$filePrefix\" ";
@@ -41,7 +41,7 @@ $outDir =~ s/^"(.*)"$/$1/;
 # read and encode the queries
 my $encoded_query = undef;
 #print STDERR "Processing: $inFile \n";
-my @files = <$inDir/*.fas>;
+my @files = <"$inDir\\*.fas">;
 foreach my $file (@files) {
     open(QUERY, $file) or die "Failed to open $file: $!\n";
     while (<QUERY>) {
@@ -82,7 +82,7 @@ print STDERR "Found RID: ", $rid, "\n";
 # parse out the estimated time to completion
 $response->content =~ /^    RTOE = (.*$)/m;
 my $rtoe = $1;
-print STDERR "Estimated time to complete: ", $rtoe, "\nSearching ";
+print STDERR "Estimated time to complete: ", $rtoe, " seconds\nSearching .";
 sleep $rtoe;
 
 #print STDERR "Starting poll every 5 seconds\n";
@@ -91,7 +91,7 @@ my $trial = 0;
 # poll for results
 while (true) {
     $trial++;
-    if ($trial eq 20) {
+    if ($trial eq 2000) {
         print STDERR "Trial exhausted .. exiting\n";
         exit 0;
     }
@@ -104,7 +104,7 @@ while (true) {
         if ($resp->content =~ /\s+Status=WAITING/m) {
             #print STDERR "Searching...\n";
             print STDERR ".";
-            sleep 10;
+            sleep $rtoe;
             next;
         }
 
